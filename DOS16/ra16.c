@@ -92,30 +92,36 @@ static void text(int x, int y, const char *s, unsigned char color)
         x += 4; ++s;
     }
 }
-static void draw(void)
+/* Static map colors are shared by the full and dirty render paths. */
+static const unsigned char terrain_colors[] = {2, 1, 8, 6};
+
+/* Redraw one visible tile, including its unit and selection marker.
+   Repainting the terrain first erases the previous sprite and its mask. */
+static void draw_tile(int tx, int ty)
 {
-    int x, y, sx, sy, i, terrain;
-    unsigned char colors[] = {2, 1, 8, 6};
-    char label[20];
-    for (y = 0; y < VIEW_H; ++y) for (x = 0; x < VIEW_W; ++x) {
-        terrain = world.terrain[y + world.camera_y][x + world.camera_x];
-        sx = x * 16; sy = y * 16;
-        rect(sx, sy, 16, 16, colors[terrain]);
-        if (terrain == 0) {
-            rect(sx + 2, sy + 4, 2, 2, 10); rect(sx + 10, sy + 12, 2, 1, 0);
-        } else if (terrain == 1) {
-            rect(sx + 2, sy + 5, 8, 1, 9); rect(sx + 6, sy + 11, 8, 1, 3);
-        } else if (terrain == 2) rect(sx + 4, sy + 4, 8, 7, 7);
-        else rect(sx, sy + 7, 16, 2, 14);
-    }
+    int x, y, sx, sy, terrain, i;
+    if (tx < 0 || tx >= VIEW_W || ty < 0 || ty >= VIEW_H) return;
+    x = tx + world.camera_x;
+    y = ty + world.camera_y;
+    sx = tx * 16;
+    sy = ty * 16;
+    terrain = world.terrain[y][x];
+    rect(sx, sy, 16, 16, terrain_colors[terrain]);
+    if (terrain == 0) {
+        rect(sx + 2, sy + 4, 2, 2, 10);
+        rect(sx + 10, sy + 12, 2, 1, 0);
+    } else if (terrain == 1) {
+        rect(sx + 2, sy + 5, 8, 1, 9);
+        rect(sx + 6, sy + 11, 8, 1, 3);
+    } else if (terrain == 2) rect(sx + 4, sy + 4, 8, 7, 7);
+    else rect(sx, sy + 7, 16, 2, 14);
     for (i = 0; i < UNIT_COUNT; ++i) {
-        x = world.units[i].x - world.camera_x;
-        y = world.units[i].y - world.camera_y;
-        if (x < 0 || x >= VIEW_W || y < 0 || y >= VIEW_H) continue;
-        sx = x * 16; sy = y * 16;
+        if (world.units[i].x != x || world.units[i].y != y) continue;
         if (i == world.selected) {
-            rect(sx, sy, 16, 1, 15); rect(sx, sy + 15, 16, 1, 15);
-            rect(sx, sy, 2, 16, 15); rect(sx + 14, sy, 2, 16, 15);
+            rect(sx, sy, 16, 1, 15);
+            rect(sx, sy + 15, 16, 1, 15);
+            rect(sx, sy, 2, 16, 15);
+            rect(sx + 14, sy, 2, 16, 15);
         }
         if (have_sprites) draw_sprite(world.units[i].facing, sx, sy);
         else {
@@ -125,11 +131,16 @@ static void draw(void)
             rect(sx + 6, sy + 1, 2, 6, 14);
         }
     }
+}
+static void draw_sidebar(void)
+{
+    int x, y, i;
+    char label[20];
     rect(240, 0, 80, 200, 8); rect(242, 2, 76, 16, 4);
     text(252, 7, "RA16 DEMO", 15);
     text(248, 24, "RADAR", 7);
     for (y = 0; y < MAP_H; ++y) for (x = 0; x < MAP_W; ++x)
-        pixel(248 + x, 34 + y, colors[world.terrain[y][x]]);
+        pixel(248 + x, 34 + y, terrain_colors[world.terrain[y][x]]);
     for (x = 0; x < VIEW_W; ++x) {
         pixel(248 + world.camera_x + x, 34 + world.camera_y, 15);
         pixel(248 + world.camera_x + x, 34 + world.camera_y + VIEW_H - 1, 15);
@@ -149,6 +160,13 @@ static void draw(void)
     text(248, 174, "TAB SELECT", 15); text(248, 184, "R ROTATE", 15);
     rect(0, 192, 240, 8, 0);
     text(4, 194, "PROTOTYPE  1 2 3 SELECT  C CENTER  ESC EXIT", 7);
+}
+static void draw(void)
+{
+    int x, y;
+    for (y = 0; y < VIEW_H; ++y)
+        for (x = 0; x < VIEW_W; ++x) draw_tile(x, y);
+    draw_sidebar();
 }
 /* BIOS key words preserve scan codes and work with the EX keyboard. */
 static int handle_key(unsigned int key)
@@ -178,6 +196,46 @@ static int handle_key(unsigned int key)
     }
     return 1;
 }
+/* Only the cells affected by a key need a repaint. Camera motion still
+   redraws the whole view, while the sidebar tracks movement and selection. */
+static int process_key(unsigned int key)
+{
+    int old_sel = world.selected;
+    int old_x = world.units[old_sel].x;
+    int old_y = world.units[old_sel].y;
+    int old_cam_x = world.camera_x;
+    int old_cam_y = world.camera_y;
+    unsigned char old_facing = world.units[old_sel].facing;
+    int result = handle_key(key);
+    if (result <= 0) return result;
+    if (world.camera_x != old_cam_x || world.camera_y != old_cam_y) {
+        draw();
+    } else if (old_sel != world.selected) {
+        draw_tile(old_x - old_cam_x, old_y - old_cam_y);
+        draw_tile(world.units[world.selected].x - old_cam_x,
+                  world.units[world.selected].y - old_cam_y);
+        draw_sidebar();
+    } else if (world.units[old_sel].x != old_x ||
+               world.units[old_sel].y != old_y) {
+        draw_tile(old_x - old_cam_x, old_y - old_cam_y);
+        draw_tile(world.units[old_sel].x - old_cam_x,
+                  world.units[old_sel].y - old_cam_y);
+        draw_sidebar();
+    } else if (world.units[old_sel].facing != old_facing) {
+        draw_tile(old_x - old_cam_x, old_y - old_cam_y);
+    }
+    return result;
+}
+/* A full redraw must agree with the incremental renderer byte-for-byte.
+   This hash is used only by -test and does not run during normal play. */
+static unsigned long video_hash(void)
+{
+    unsigned int i;
+    unsigned long hash = 0;
+    for (i = 0; i < 32768U; ++i)
+        hash = (hash << 5) ^ (hash >> 27) ^ (unsigned long)vram[i];
+    return hash;
+}
 int test_sim(void);
 int main(int argc, char **argv)
 {
@@ -186,6 +244,7 @@ int main(int argc, char **argv)
     int result, smoke = argc == 2 && strcmp(argv[1], "-test") == 0;
     FILE *f;
     unsigned int i;
+    unsigned long incremental_hash;
     if (smoke) test_sim();
     have_sprites = load_sprites();
     if (have_sprites < 0) return 5;
@@ -205,9 +264,13 @@ int main(int argc, char **argv)
     world_init(&world); draw();
     if (smoke) {
         /* Exercise the same input dispatcher used interactively. */
-        handle_key('d'); handle_key('2'); handle_key('w');
-        for (i = 0; i < 8; ++i) { handle_key('r'); draw(); }
-        handle_key(0x4d00); handle_key(0x5000); draw();
+        process_key('d'); process_key('2'); process_key('w');
+        for (i = 0; i < 8; ++i) process_key('r');
+        /* Confirm partial updates leave precisely the same VRAM as full redraw. */
+        incremental_hash = video_hash();
+        draw();
+        if (incremental_hash != video_hash()) { mode(old_mode); return 6; }
+        process_key(0x4d00); process_key(0x5000);
         f = fopen("FRAME.RAW", "wb");
         if (!f) { mode(old_mode); return 2; }
         for (i = 0; i < 32768U; ++i) if (fputc(vram[i], f) == EOF) {
@@ -226,9 +289,8 @@ int main(int argc, char **argv)
     }
     for (;;) {
         /* Blocking BIOS read: no idle redraw or processor-speed-dependent loop. */
-        result = handle_key(_bios_keybrd(_KEYBRD_READ));
+        result = process_key(_bios_keybrd(_KEYBRD_READ));
         if (result < 0) break;
-        if (result) draw();
     }
     mode(old_mode);
     return 0;
