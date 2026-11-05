@@ -1,0 +1,57 @@
+name: DOS16 Tandy prototype
+on:
+  push:
+    paths: ['DOS16/**', '.github/workflows/dos16.yml']
+  pull_request:
+    paths: ['DOS16/**', '.github/workflows/dos16.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Open Watcom and DOSBox
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/ow.tar.xz" \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz
+          echo "89e90b7544cf3ea4a38124ec4c104a5027f31101405d7115c3f833daa465bb48  $RUNNER_TEMP/ow.tar.xz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/watcom"
+          tar -xf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/watcom"
+          echo "WATCOM=$RUNNER_TEMP/watcom" >> "$GITHUB_ENV"
+          echo "INCLUDE=$RUNNER_TEMP/watcom/h" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/watcom/binl64" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y dosbox
+      - name: Native simulation tests and 8086 DOS build
+        working-directory: DOS16
+        run: |
+          cc -std=c89 -pedantic -Wall -Wextra -Werror -DHOST_TEST sim.c testsim.c -o host-test
+          ./host-test
+          wmake
+      - name: Execute DOS smoke test in Tandy mode
+        working-directory: DOS16
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          rm -f PASS.TXT FRAME.RAW
+          timeout 60s dosbox -conf dosbox.conf -c 'mount c .' -c 'c:' -c 'ra16 -test' -c 'exit'
+          python3 check_smoke.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ra16-dos-tandy
+          if-no-files-found: error
+          path: |
+            DOS16/RA16.EXE
+            DOS16/RA16.MAP
+            DOS16/FRAME.RAW
+            DOS16/frame.ppm
+            DOS16/PASS.TXT
+            DOS16/README.md
+            DOS16/dosbox.conf
+            LICENSE.md

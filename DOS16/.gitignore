@@ -1,0 +1,10 @@
+*.obj
+*.o
+*.map
+*.MAP
+*.exe
+*.EXE
+*.RAW
+PASS.TXT
+*.ppm
+host-test
