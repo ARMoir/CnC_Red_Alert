@@ -16,7 +16,10 @@ artwork from user-supplied game data; see [ASSETS.md](ASSETS.md). All original s
 - A 240x192 battlefield, 80-pixel sidebar with radar/viewport outline, selection
   and coordinates, and an 8-pixel status strip. Tiles are 16x16 pixels.
 - Keyboard-driven, tile-step movement with terrain/occupancy checks and bounded
-  tile-step camera scrolling. No autonomous movement or real-time simulation yet.
+  tile-step camera scrolling. Moving or selecting a unit repaints just the affected
+  16x16 tile(s), rotation repaints one tile, and blocked moves repaint nothing.
+  Camera movement still redraws the whole view. No autonomous movement or
+  real-time simulation yet.
 - DOS smoke mode, native simulation tests, CI cross-build and emulator check.
 - Optional `TANK.SPR` pack: eight converted original light-tank facings and its
   sidebar icon. Without the pack, generated geometric tanks remain available.
@@ -104,8 +107,10 @@ inputs through the real input dispatcher, renders, saves 32 KiB of video memory
 to `FRAME.RAW`, restores the video mode and writes `PASS.TXT` only on success.
 Always remove stale output first. The Python check validates the MZ header,
 success marker and selected framebuffer pixels and creates `frame.ppm`.
-The dump validates memory contents; visual emulator inspection is a separate
-check of what the display actually shows. CI publishes the EXE, linker map,
+The smoke test also compares the screen hash after incremental unit movement,
+selection and rotation with a full redraw, to catch stale sprite/selection
+pixels. The dump validates memory contents; visual emulator inspection is a
+separate check of what the display actually shows. CI publishes the EXE, linker map,
 frame dump/preview, test marker, configuration, instructions and license.
 
 ## Validation and limits
@@ -122,10 +127,11 @@ After adding the optional sprite loader: EXE 20,190 bytes; linker memory size
 passed the DOSBox smoke/framebuffer test. These sizes describe the Windows-host
 cross-build; library/build differences may change the exact byte counts.
 
-Full redraws write directly to VRAM without retrace synchronization or a back
-buffer. Scrolling may visibly paint/tear and feel slow on an EX. This milestone
-prioritizes verified layout and controls; no frame-rate or hardware-performance
-claim is made. A successful BIOS mode query is not reliable hardware detection;
+The incremental unit renderer writes directly to VRAM; camera scrolling and
+sidebar updates still use substantial VRAM writes. There is no retrace
+synchronization or back buffer. Scrolling may visibly paint/tear and feel slow
+on an EX. No frame-rate or hardware-performance claim is made. Incremental
+rendering reduces work but still needs measurement on physical hardware. A successful BIOS mode query is not reliable hardware detection;
 the startup prompt is intentional. Do not select Y on a non-Tandy adapter.
 
 Before claiming hardware support: test startup/exit, all four scroll limits,
@@ -134,8 +140,9 @@ Num Lock behavior, DOS free memory and redraw latency on the actual EX/V20.
 
 ## Next milestones (not implemented)
 
-1. Measure EX/V20 redraw latency and memory; add dirty-tile rendering, optimized
-   row blits and a bounded simulation tick before expanding gameplay.
+1. Measure EX/V20 redraw latency and memory; optimize camera scrolling and
+   sidebar/radar rendering, then add a bounded simulation tick before expanding
+   gameplay.
 2. Movement orders and pathfinding with explicit node/memory budgets.
 3. Minimal combat/health, then economy and production with small fixed pools.
 4. Expand the initial tank conversion and narrowly scoped original-source reuse
