@@ -32,6 +32,7 @@ jobs:
         run: |
           cc -std=c89 -pedantic -Wall -Wextra -Werror -DHOST_TEST sim.c testsim.c -o host-test
           ./host-test
+          python3 tools/test_assets.py
           wmake
       - name: Execute DOS smoke test in Tandy mode
         working-directory: DOS16
@@ -40,6 +41,27 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           rm -f PASS.TXT FRAME.RAW
+          timeout 60s dosbox -conf dosbox.conf -c 'mount c .' -c 'c:' -c 'ra16 -test' -c 'exit'
+          python3 check_smoke.py
+      - name: Verify optional sprite loader with synthetic artwork
+        working-directory: DOS16
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python3 tools/test_assets.py --fixture TANK.SPR
+          rm -f PASS.TXT FRAME.RAW
+          timeout 60s dosbox -conf dosbox.conf -c 'mount c .' -c 'c:' -c 'ra16 -test' -c 'exit'
+          python3 check_smoke.py
+          mv FRAME.RAW SPRITES.RAW
+          mv frame.ppm sprites.ppm
+          printf 'invalid pack' > TANK.SPR
+          rm -f PASS.TXT FRAME.RAW
+          timeout 60s dosbox -conf dosbox.conf -c 'mount c .' -c 'c:' -c 'ra16 -test' -c 'exit'
+          test ! -e PASS.TXT
+          test ! -e FRAME.RAW
+          rm TANK.SPR
+          # Restore asset-free output for the downloadable demo.
           timeout 60s dosbox -conf dosbox.conf -c 'mount c .' -c 'c:' -c 'ra16 -test' -c 'exit'
           python3 check_smoke.py
       - uses: actions/upload-artifact@v4
@@ -52,6 +74,9 @@ jobs:
             DOS16/FRAME.RAW
             DOS16/frame.ppm
             DOS16/PASS.TXT
+            DOS16/SPRITES.RAW
+            DOS16/sprites.ppm
             DOS16/README.md
+            DOS16/ASSETS.md
             DOS16/dosbox.conf
             LICENSE.md

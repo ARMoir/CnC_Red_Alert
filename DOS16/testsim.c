@@ -12,6 +12,7 @@ int test_sim(void)
     assert(w.selected == 0 && w.units[0].x == 5);
     memset(w.terrain, 0, sizeof(w.terrain));
     assert(world_move(&w, 1, 0));
+    assert(w.units[0].facing == 2);
     assert(!world_move(&w, 1, 0)); /* unit at 7,6 */
     w.terrain[7][6] = 1;
     assert(!world_move(&w, 0, 1));
@@ -19,6 +20,7 @@ int test_sim(void)
     assert(!world_move(&w, 0, 1));
     w.terrain[7][6] = 3;
     assert(world_move(&w, 0, 1));
+    assert(w.units[0].facing == 4);
     assert(!world_move(&w, 1, 1));
     w.units[0].x = w.units[0].y = 0;
     assert(!world_move(&w, -1, 0) && !world_move(&w, 0, -1));

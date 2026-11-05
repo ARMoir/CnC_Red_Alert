@@ -6,7 +6,8 @@
 #define VIEW_W 15
 #define VIEW_H 12
 #define UNIT_COUNT 3
-typedef struct { int x, y; } Unit;
+/* Facing order follows the original compass convention: N, NE, E, ... NW. */
+typedef struct { int x, y; unsigned char facing; } Unit;
 typedef struct {
     unsigned char terrain[MAP_H][MAP_W];
     Unit units[UNIT_COUNT];

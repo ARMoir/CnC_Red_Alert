@@ -8,3 +8,9 @@
 PASS.TXT
 *.ppm
 host-test
+*.SPR
+*.SHP
+*.PAL
+*.MIX
+__pycache__/
+converted/

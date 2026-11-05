@@ -4,10 +4,35 @@
 #include <conio.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include "sim.h"
 
 static World world;
 static unsigned char __far *vram;
+static unsigned char sprites[1768];
+static int have_sprites;
+
+/* Optional preconverted artwork; no MIX/SHP decompression on the V20. */
+static int load_sprites(void)
+{
+    FILE *f = fopen("TANK.SPR", "rb");
+    size_t n;
+    int extra, failed;
+    if (!f) {
+        if (errno == ENOENT) return 0;
+        perror("TANK.SPR"); return -1;
+    }
+    n = fread(sprites, 1, sizeof(sprites), f);
+    extra = fgetc(f);
+    failed = ferror(f);
+    if (fclose(f)) failed = 1;
+    if (n != sizeof(sprites) || extra != EOF || failed ||
+        memcmp(sprites, "R16SPR1", 8) != 0) {
+        puts("Invalid TANK.SPR: expected version 1, exactly 1768 bytes.");
+        return -1;
+    }
+    return 1;
+}
 /* Compact original 3x5 font, A-Z then 0-9. Bit 14 is top left. */
 static const unsigned int font[] = {
     0x2bed,0x6bae,0x3923,0x6b6e,0x79a7,0x79a4,0x396b,
@@ -30,6 +55,20 @@ static void pixel(int x, int y, unsigned char c)
     off = video_offset((unsigned int)x, (unsigned int)y);
     if (x & 1) vram[off] = (vram[off] & 0xf0) | c;
     else vram[off] = (vram[off] & 0x0f) | (c << 4);
+}
+static void draw_sprite(int frame, int x, int y)
+{
+    int w = frame == 8 ? 32 : 16;
+    int h = frame == 8 ? 24 : 16;
+    int i, total = w * h;
+    unsigned char color;
+    unsigned char *data = sprites + 8 + frame * 160;
+    unsigned char *mask = data + total / 2;
+    for (i = 0; i < total; ++i) if (mask[i / 8] & (0x80 >> (i & 7))) {
+        color = data[i / 2];
+        color = (unsigned char)((i & 1) ? color & 15 : color >> 4);
+        pixel(x + i % w, y + i / w, color);
+    }
 }
 /* All rectangles have even x/width; fill two pixels per write. */
 static void rect(int x, int y, int width, int height, unsigned char c)
@@ -78,10 +117,13 @@ static void draw(void)
             rect(sx, sy, 16, 1, 15); rect(sx, sy + 15, 16, 1, 15);
             rect(sx, sy, 2, 16, 15); rect(sx + 14, sy, 2, 16, 15);
         }
-        rect(sx + 2, sy + 3, 12, 10, 0);
-        rect(sx + 4, sy + 3, 8, 10, 12);
-        rect(sx + 6, sy + 5, 4, 5, 4);
-        rect(sx + 6, sy + 1, 2, 6, 14);
+        if (have_sprites) draw_sprite(world.units[i].facing, sx, sy);
+        else {
+            rect(sx + 2, sy + 3, 12, 10, 0);
+            rect(sx + 4, sy + 3, 8, 10, 12);
+            rect(sx + 6, sy + 5, 4, 5, 4);
+            rect(sx + 6, sy + 1, 2, 6, 14);
+        }
     }
     rect(240, 0, 80, 200, 8); rect(242, 2, 76, 16, 4);
     text(252, 7, "RA16 DEMO", 15);
@@ -101,11 +143,12 @@ static void draw(void)
     sprintf(label, "UNIT %d", world.selected + 1); text(248, 105, label, 15);
     sprintf(label, "X %02d Y %02d", world.units[world.selected].x, world.units[world.selected].y);
     text(248, 114, label, 7);
-    text(248, 128, "ARROWS PAN", 15); text(248, 138, "WASD MOVE", 15);
-    text(248, 148, "TAB SELECT", 15); text(248, 158, "C CENTER", 15);
-    text(248, 174, "NO COMBAT", 7); text(248, 184, "ESC EXIT", 15);
+    if (have_sprites) draw_sprite(8, 264, 124);
+    else text(248, 132, "NO ASSET PACK", 7);
+    text(248, 154, "ARROWS PAN", 15); text(248, 164, "WASD MOVE", 15);
+    text(248, 174, "TAB SELECT", 15); text(248, 184, "R ROTATE", 15);
     rect(0, 192, 240, 8, 0);
-    text(4, 194, "DOS16 PROTOTYPE  1 2 3 SELECT UNIT", 7);
+    text(4, 194, "PROTOTYPE  1 2 3 SELECT  C CENTER  ESC EXIT", 7);
 }
 /* BIOS key words preserve scan codes and work with the EX keyboard. */
 static int handle_key(unsigned int key)
@@ -129,6 +172,8 @@ static int handle_key(unsigned int key)
     case 9: world_select(&world, (world.selected + 1) % UNIT_COUNT); break;
     case '1': case '2': case '3': world_select(&world, c - '1'); break;
     case 'c': world_center(&world); break;
+    case 'r': world.units[world.selected].facing =
+                  (unsigned char)((world.units[world.selected].facing + 1) & 7); break;
     default: return 0;
     }
     return 1;
@@ -142,6 +187,8 @@ int main(int argc, char **argv)
     FILE *f;
     unsigned int i;
     if (smoke) test_sim();
+    have_sprites = load_sprites();
+    if (have_sprites < 0) return 5;
     if (!smoke) {
         puts("RA16 prototype requires Tandy 320x200 16-color graphics.");
         puts("Press Y to start on Tandy hardware/emulation; any other key cancels.");
@@ -159,6 +206,7 @@ int main(int argc, char **argv)
     if (smoke) {
         /* Exercise the same input dispatcher used interactively. */
         handle_key('d'); handle_key('2'); handle_key('w');
+        for (i = 0; i < 8; ++i) { handle_key('r'); draw(); }
         handle_key(0x4d00); handle_key(0x5000); draw();
         f = fopen("FRAME.RAW", "wb");
         if (!f) { mode(old_mode); return 2; }
@@ -168,7 +216,8 @@ int main(int argc, char **argv)
         result = fclose(f);
         mode(old_mode);
         if (result || world.selected != 1 || world.units[0].x != 6 ||
-            world.units[1].y != 5 || world.camera_x != 1 || world.camera_y != 1)
+            world.units[1].y != 5 || world.camera_x != 1 || world.camera_y != 1 ||
+            world.units[0].facing != 2 || world.units[1].facing != 0)
             return 3;
         f = fopen("PASS.TXT", "w");
         if (!f) return 4;

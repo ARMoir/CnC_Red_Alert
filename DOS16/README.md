@@ -1,8 +1,9 @@
 # RA16: Tandy DOS16 prototype, milestone 1
 
-This is a small, newly written experimental engine, **not a recompiled or playable
-Red Alert port**. It does not link the original engine or load commercial game
-assets. All original source and build files remain unchanged. Repository
+This is a small experimental engine, **not a recompiled or playable
+Red Alert port**. It does not link the original engine. An optional offline
+converter now adapts original format/facing code and loads converted light-tank
+artwork from user-supplied game data; see [ASSETS.md](ASSETS.md). All original source and build files remain unchanged. Repository
 [LICENSE.md](../LICENSE.md) applies, including its additional terms.
 
 ## Implemented
@@ -17,6 +18,8 @@ assets. All original source and build files remain unchanged. Repository
 - Keyboard-driven, tile-step movement with terrain/occupancy checks and bounded
   tile-step camera scrolling. No autonomous movement or real-time simulation yet.
 - DOS smoke mode, native simulation tests, CI cross-build and emulator check.
+- Optional `TANK.SPR` pack: eight converted original light-tank facings and its
+  sidebar icon. Without the pack, generated geometric tanks remain available.
 
 | Key | Action |
 | --- | --- |
@@ -25,6 +28,7 @@ assets. All original source and build files remain unchanged. Repository
 | W A S D | Move selected tank one tile; water, rocks and other tanks block it |
 | Tab / 1 2 3 | Cycle / select tank |
 | C | Center camera on selection |
+| R | Rotate selection 45 degrees (visible with the optional sprite pack) |
 | Esc | Restore previous BIOS video mode and exit |
 
 Selection and movement do not automatically move the camera; press C if a tank
@@ -62,7 +66,8 @@ Or use an existing Open Watcom DOS installation's environment and run `wmake`
 from this directory. The native compiler itself need not run on the Tandy: copy
 the resulting EXE to the target. The build uses `wcl -bt=dos -ms -0 -os`, with
 warnings treated as errors. `wcl386` is not a substitute. No original game
-libraries, assembler, asset files or proprietary SDKs are needed for this demo.
+libraries, assembler, asset files or proprietary SDKs are needed for the default demo.
+To use the original tank artwork, follow the separate [conversion instructions](ASSETS.md).
 
 ## Run and validate
 
@@ -112,6 +117,11 @@ size: 60,928 bytes, including a 2,048-byte stack (not total machine RAM usage).
 Tests are included in the EXE for repeatable target-side checks; their 32 KiB
 address-coverage array can be separated later when optimizing memory.
 
+After adding the optional sprite loader: EXE 20,190 bytes; linker memory size
+65,520 bytes including the same stack. The actual converted Allied CD tank pack
+passed the DOSBox smoke/framebuffer test. These sizes describe the Windows-host
+cross-build; library/build differences may change the exact byte counts.
+
 Full redraws write directly to VRAM without retrace synchronization or a back
 buffer. Scrolling may visibly paint/tear and feel slow on an EX. This milestone
 prioritizes verified layout and controls; no frame-rate or hardware-performance
@@ -128,8 +138,8 @@ Num Lock behavior, DOS free memory and redraw latency on the actual EX/V20.
    row blits and a bounded simulation tick before expanding gameplay.
 2. Movement orders and pathfinding with explicit node/memory budgets.
 3. Minimal combat/health, then economy and production with small fixed pools.
-4. Evaluate narrowly scoped adaptations of original map/rules logic and asset
-   conversion under the repository license. No promise of original campaigns,
+4. Expand the initial tank conversion and narrowly scoped original-source reuse
+   into map/rules logic. No promise of original campaigns,
    save compatibility, networking, audio, mouse input or full game parity.
 
 ## Technical references

@@ -27,7 +27,20 @@ def color(x, y):
 assert color(0, 0) == 2, "Terrain missing"
 assert color(240, 0) == 8 and color(242, 2) == 4, "Sidebar missing"
 assert color(96, 64) == 15, "Selected moved unit missing"
-assert color(84, 83) == 12, "First moved unit missing"
+if Path('TANK.SPR').exists():
+    pack = Path('TANK.SPR').read_bytes()
+    assert pack[:8] == b'R16SPR1\0' and len(pack) == 1768
+    # Compare every opaque pixel of the east-facing first tank and sidebar icon.
+    for frame, left, top, width, height in [(2, 80, 80, 16, 16), (8, 264, 124, 32, 24)]:
+        size = width * height
+        start = 8 + frame * 160
+        for i in range(size):
+            if pack[start + size // 2 + i // 8] & (0x80 >> (i % 8)):
+                byte = pack[start + i // 2]
+                expected = byte & 15 if i % 2 else byte >> 4
+                assert color(left + i % width, top + i // width) == expected, 'Sprite pixel mismatch'
+else:
+    assert color(84, 83) == 12, "First moved unit missing"
 assert color(0, 192) == 0, "Status strip missing"
 assert len(set(pixels)) >= 10, "Unexpectedly empty/monochrome output"
 rgb = b"".join(palette[c * 3:c * 3 + 3] for c in pixels)

@@ -14,6 +14,7 @@ void world_init(World *w)
         }
     for (i = 0; i < UNIT_COUNT; ++i) {
         w->units[i].x = 5 + i * 2; w->units[i].y = 6;
+        w->units[i].facing = 0;
         w->terrain[6][5 + i * 2] = 0;
     }
     w->selected = w->camera_x = w->camera_y = 0;
@@ -30,6 +31,7 @@ int world_move(World *w, int dx, int dy)
     for (i = 0; i < UNIT_COUNT; ++i)
         if (w->units[i].x == x && w->units[i].y == y) return 0;
     u->x = x; u->y = y;
+    u->facing = (unsigned char)(dy < 0 ? 0 : (dx > 0 ? 2 : (dy > 0 ? 4 : 6)));
     return 1;
 }
 void world_scroll(World *w, int dx, int dy)
