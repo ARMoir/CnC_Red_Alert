@@ -1,0 +1,16 @@
+*.obj
+*.o
+*.map
+*.MAP
+*.exe
+*.EXE
+*.RAW
+PASS.TXT
+*.ppm
+host-test
+*.SPR
+*.SHP
+*.PAL
+*.MIX
+__pycache__/
+converted/
